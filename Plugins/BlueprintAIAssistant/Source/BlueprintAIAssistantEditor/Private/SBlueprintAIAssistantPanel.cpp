@@ -3072,24 +3072,6 @@ FReply SBlueprintAIAssistantPanel::OnAskClicked()
 	Request.SystemPrompt = FBlueprintPromptBuilder::BuildSystemPrompt();
 	Request.UserPrompt = AugmentUserPromptWithMultiTurn(BaseUserPrompt, CurrentDslSteps);
 
-	// 避免上下文过大导致部分网关/服务端拒绝或连接异常（豆包 Responses 对大 body 更敏感）
-	int32 MaxPromptChars = 8000;
-	if (const UBlueprintAIAssistantSettings* AISettings = GetDefault<UBlueprintAIAssistantSettings>())
-	{
-		if (AISettings->ProviderKind == EBlueprintAIProviderKind::OpenAICompatible)
-		{
-			MaxPromptChars = 2500;
-		}
-		else if (AISettings->ProviderKind == EBlueprintAIProviderKind::Doubao)
-		{
-			MaxPromptChars = 3500;
-		}
-	}
-	if (Request.UserPrompt.Len() > MaxPromptChars)
-	{
-		Request.UserPrompt = Request.UserPrompt.Left(MaxPromptChars) + TEXT("\n\n(已截断上下文，避免请求过大)");
-	}
-
 	FString Kind, Model;
 	GetProviderKindAndModel(Kind, Model);
 	LastUserPrompt = UserQuestion;
@@ -3582,23 +3564,6 @@ void SBlueprintAIAssistantPanel::StartGenerateDslWithQuestion(const FString& Eff
 		? BaseUserPrompt
 		: AugmentUserPromptWithMultiTurn(BaseUserPrompt, PrevDslForMultiturn);
 	Request.MaxOutputTokens = 3072;
-
-	int32 MaxPromptChars = 8000;
-	if (const UBlueprintAIAssistantSettings* AISettings = GetDefault<UBlueprintAIAssistantSettings>())
-	{
-		if (AISettings->ProviderKind == EBlueprintAIProviderKind::OpenAICompatible)
-		{
-			MaxPromptChars = 2500;
-		}
-		else if (AISettings->ProviderKind == EBlueprintAIProviderKind::Doubao)
-		{
-			MaxPromptChars = 3500;
-		}
-	}
-	if (Request.UserPrompt.Len() > MaxPromptChars)
-	{
-		Request.UserPrompt = Request.UserPrompt.Left(MaxPromptChars) + TEXT("\n\n(已截断上下文，避免请求过大)");
-	}
 
 	FString Kind, Model;
 	GetProviderKindAndModel(Kind, Model);
