@@ -523,6 +523,8 @@ static bool TryGetBoolLoose(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Fie
 	return false;
 }
 
+static void ParseVarNameAliases(const TSharedPtr<FJsonObject>& StepObj, FString& OutVarName);
+
 static FString NormalizeActionString(FString In)
 {
 	FString A = In.TrimStartAndEnd();
@@ -548,6 +550,192 @@ static FString NormalizeActionString(FString In)
 	return In.TrimStartAndEnd();
 }
 
+static FString NormalizeSimpleTypeName(FString In)
+{
+	FString T = In.TrimStartAndEnd();
+	T.ReplaceInline(TEXT(" "), TEXT(""));
+	T.ReplaceInline(TEXT("_"), TEXT(""));
+	if (T.IsEmpty())
+	{
+		return TEXT("");
+	}
+
+	const FString Lower = T.ToLower();
+	if (Lower.Equals(TEXT("float")) || Lower.Equals(TEXT("double")) || Lower.Equals(TEXT("real")) || Lower.Equals(TEXT("number")))
+	{
+		return TEXT("float");
+	}
+	if (Lower.Equals(TEXT("int")) || Lower.Equals(TEXT("integer")) || Lower.Equals(TEXT("int32")))
+	{
+		return TEXT("int");
+	}
+	if (Lower.Equals(TEXT("bool")) || Lower.Equals(TEXT("boolean")))
+	{
+		return TEXT("bool");
+	}
+	if (Lower.Equals(TEXT("string")) || Lower.Equals(TEXT("str")) || Lower.Equals(TEXT("fstring")))
+	{
+		return TEXT("string");
+	}
+	if (Lower.Equals(TEXT("text")) || Lower.Equals(TEXT("ftext")))
+	{
+		return TEXT("text");
+	}
+	if (Lower.Equals(TEXT("name")) || Lower.Equals(TEXT("fname")))
+	{
+		return TEXT("name");
+	}
+	if (Lower.Equals(TEXT("vector")) || Lower.Equals(TEXT("fvector")))
+	{
+		return TEXT("vector");
+	}
+	if (Lower.Equals(TEXT("rotator")) || Lower.Equals(TEXT("frotator")))
+	{
+		return TEXT("rotator");
+	}
+	if (Lower.Equals(TEXT("transform")) || Lower.Equals(TEXT("ftransform")))
+	{
+		return TEXT("transform");
+	}
+	if (Lower.Equals(TEXT("actor")) || Lower.Equals(TEXT("object")))
+	{
+		return Lower;
+	}
+
+	return TEXT("");
+}
+
+static FString InferSimpleTypeFromVarName(const FString& InVarName)
+{
+	const FString Name = InVarName.TrimStartAndEnd().ToLower();
+	if (Name.IsEmpty())
+	{
+		return TEXT("");
+	}
+
+	if (Name.Contains(TEXT("health")) || Name.Contains(TEXT("hp")) || Name.Contains(TEXT("damage")) ||
+		Name.Contains(TEXT("speed")) || Name.Contains(TEXT("rate")) || Name.Contains(TEXT("time")))
+	{
+		return TEXT("float");
+	}
+	if (Name.StartsWith(TEXT("is")) || Name.StartsWith(TEXT("has")) || Name.StartsWith(TEXT("can")) || Name.StartsWith(TEXT("should")) ||
+		Name.Contains(TEXT("enabled")) || Name.Contains(TEXT("active")) || Name.Contains(TEXT("valid")))
+	{
+		return TEXT("bool");
+	}
+	if (Name.Contains(TEXT("count")) || Name.Contains(TEXT("index")) || Name.Contains(TEXT("num")) || Name.Contains(TEXT("score")))
+	{
+		return TEXT("int");
+	}
+	if (Name.Contains(TEXT("name")))
+	{
+		return TEXT("name");
+	}
+
+	return TEXT("");
+}
+
+static FString InferSimpleTypeFromDefaultLiteral(const FString& InLiteral)
+{
+	FString S = InLiteral.TrimStartAndEnd();
+	if (S.IsEmpty())
+	{
+		return TEXT("");
+	}
+
+	if (S.Equals(TEXT("true"), ESearchCase::IgnoreCase) || S.Equals(TEXT("false"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("bool");
+	}
+	if (S.Len() >= 2 && ((S[0] == TEXT('"') && S[S.Len() - 1] == TEXT('"')) || (S[0] == TEXT('\'') && S[S.Len() - 1] == TEXT('\''))))
+	{
+		return TEXT("string");
+	}
+
+	bool bHasDigit = false;
+	bool bHasDot = false;
+	bool bNumeric = true;
+	for (int32 Index = 0; Index < S.Len(); ++Index)
+	{
+		const TCHAR C = S[Index];
+		if (C >= TEXT('0') && C <= TEXT('9'))
+		{
+			bHasDigit = true;
+			continue;
+		}
+		if ((C == TEXT('-') || C == TEXT('+')) && Index == 0)
+		{
+			continue;
+		}
+		if (C == TEXT('.') && !bHasDot)
+		{
+			bHasDot = true;
+			continue;
+		}
+
+		bNumeric = false;
+		break;
+	}
+
+	if (bNumeric && bHasDigit)
+	{
+		return bHasDot ? TEXT("float") : TEXT("int");
+	}
+
+	return TEXT("");
+}
+
+static void CanonicalizeCreateMemberVariableType(const TSharedPtr<FJsonObject>& StepObj)
+{
+	if (!StepObj.IsValid())
+	{
+		return;
+	}
+
+	const TSharedPtr<FJsonObject>* ExistingTypeObj = nullptr;
+	if (StepObj->TryGetObjectField(TEXT("varType"), ExistingTypeObj) && ExistingTypeObj && ExistingTypeObj->IsValid())
+	{
+		FString ExistingType;
+		if ((*ExistingTypeObj)->TryGetStringField(TEXT("type"), ExistingType) && !ExistingType.TrimStartAndEnd().IsEmpty())
+		{
+			return;
+		}
+	}
+
+	FString TypeText;
+	FString Candidate;
+	if (StepObj->TryGetStringField(TEXT("varType"), Candidate))
+	{
+		TypeText = NormalizeSimpleTypeName(Candidate);
+	}
+	if (TypeText.IsEmpty() && StepObj->TryGetStringField(TEXT("nodeType"), Candidate))
+	{
+		TypeText = NormalizeSimpleTypeName(Candidate);
+	}
+	if (TypeText.IsEmpty() && StepObj->TryGetStringField(TEXT("type"), Candidate))
+	{
+		TypeText = NormalizeSimpleTypeName(Candidate);
+	}
+	if (TypeText.IsEmpty())
+	{
+		FString VarName;
+		ParseVarNameAliases(StepObj, VarName);
+		TypeText = InferSimpleTypeFromVarName(VarName);
+	}
+	if (TypeText.IsEmpty() && (StepObj->TryGetStringField(TEXT("defaultValue"), Candidate) || StepObj->TryGetStringField(TEXT("value"), Candidate)))
+	{
+		TypeText = InferSimpleTypeFromDefaultLiteral(Candidate);
+	}
+	if (TypeText.IsEmpty())
+	{
+		return;
+	}
+
+	TSharedRef<FJsonObject> TypeObj = MakeShared<FJsonObject>();
+	TypeObj->SetStringField(TEXT("type"), TypeText);
+	StepObj->SetObjectField(TEXT("varType"), TypeObj);
+}
+
 static EBlueprintDslActionType InferActionTypeFromFields(const TSharedPtr<FJsonObject>& StepObj)
 {
 	if (!StepObj.IsValid())
@@ -560,6 +748,12 @@ static EBlueprintDslActionType InferActionTypeFromFields(const TSharedPtr<FJsonO
 		StepObj->HasField(TEXT("fromNode")) || StepObj->HasField(TEXT("from")) || StepObj->HasField(TEXT("toNode")) || StepObj->HasField(TEXT("to")))
 	{
 		return EBlueprintDslActionType::ConnectPins;
+	}
+	if ((StepObj->HasField(TEXT("varName")) || StepObj->HasField(TEXT("variableName"))) &&
+		(StepObj->HasField(TEXT("varType")) || StepObj->HasField(TEXT("nodeType")) || StepObj->HasField(TEXT("type")) ||
+			(StepObj->HasField(TEXT("defaultValue")) && !StepObj->HasField(TEXT("pinName")) && !StepObj->HasField(TEXT("nodeId")))))
+	{
+		return EBlueprintDslActionType::CreateMemberVariable;
 	}
 	// 默认值特征
 	if (StepObj->HasField(TEXT("pinName")) || StepObj->HasField(TEXT("defaultValue")))
@@ -578,6 +772,11 @@ static EBlueprintDslActionType InferActionTypeFromFields(const TSharedPtr<FJsonO
 	}
 	// 类变量创建特征
 	if (StepObj->HasField(TEXT("varType")) && (StepObj->HasField(TEXT("varName")) || StepObj->HasField(TEXT("variableName"))))
+	{
+		return EBlueprintDslActionType::CreateMemberVariable;
+	}
+	if ((StepObj->HasField(TEXT("varName")) || StepObj->HasField(TEXT("variableName"))) &&
+		(StepObj->HasField(TEXT("nodeType")) || StepObj->HasField(TEXT("type")) || StepObj->HasField(TEXT("defaultValue"))))
 	{
 		return EBlueprintDslActionType::CreateMemberVariable;
 	}
@@ -626,6 +825,16 @@ static void CanonicalizeStepObject(const TSharedPtr<FJsonObject>& StepObj)
 		case EBlueprintDslActionType::CreateMemberVariable: StepObj->SetStringField(TEXT("action"), TEXT("CreateMemberVariable")); break;
 		case EBlueprintDslActionType::CreateFunctionGraph: StepObj->SetStringField(TEXT("action"), TEXT("CreateFunctionGraph")); break;
 		default: break;
+		}
+	}
+
+	if (StepObj->HasField(TEXT("action")))
+	{
+		FString A;
+		StepObj->TryGetStringField(TEXT("action"), A);
+		if (A.Equals(TEXT("CreateMemberVariable"), ESearchCase::IgnoreCase))
+		{
+			CanonicalizeCreateMemberVariableType(StepObj);
 		}
 	}
 
