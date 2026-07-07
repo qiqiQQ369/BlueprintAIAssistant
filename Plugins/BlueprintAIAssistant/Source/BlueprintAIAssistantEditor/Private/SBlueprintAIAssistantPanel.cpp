@@ -341,6 +341,38 @@ static FString GetProviderSummaryLine()
 	return FString::Printf(TEXT("Provider=%s | Model=%s | Endpoint=%s"), *KindLabel, *ModelDisplay, *EndpointDisplay);
 }
 
+static FString BuildCompactDslSystemPrompt()
+{
+	return TEXT(
+		"You are an Unreal Engine 5.6 Blueprint automation assistant. Output only one valid JSON object, no Markdown.\n"
+		"Schema: {\"version\":2,\"steps\":[step,...]}.\n"
+		"Step actions: CreateNode, ConnectPins, SetPinDefault, Comment, GetVariable, SetVariable, CreateMemberVariable, CreateFunctionGraph.\n"
+		"CreateNode fields: stepId, action, targetGraph, nodeId, nodeType, functionName, targetClass, cases, varName, defaultValue, requiresConfirmation, description.\n"
+		"ConnectPins fields: stepId, action, fromNodeId, fromPin, toNodeId, toPin, requiresConfirmation, description.\n"
+		"SetPinDefault fields: stepId, action, nodeId, pinName, defaultValue, requiresConfirmation, description.\n"
+		"Allowed nodeType values include Branch, Sequence, DoOnce, Gate, Delay, InputKey, GetComponentByClass, SetTimerByFunctionName, ForEachLoop, SwitchOnInt, SwitchOnString, Select, MakeArrayInt, MakeArray, CallFunction, GetVariable, SetVariable, SpawnActorFromClass, Cast, IsValid, MakeVector, BreakVector, MakeRotator, BreakRotator.\n"
+		"Use existing Event BeginPlay as nodeId BeginPlay and connect from BeginPlay.then; do not create BeginPlay as CallFunction.\n"
+		"Exec pin names: input execute, output then. PrintString input string pin is InString. Delay output is Completed.\n"
+		"Input keys: CreateNode nodeType=InputKey, functionName is the key such as E, then connect from Pressed or Released.\n"
+		"LineTrace: use CallFunction functionName=LineTraceSingle. OutHit is HitResult; use BreakHitResult and HitActor before Cast.Object.\n"
+		"Overlap events are events, not CallFunction. Prefer nodeId OnActorBeginOverlap or OnComponentBeginOverlap and use OtherActor.\n"
+		"Generate the smallest executable chain, usually 3 to 10 steps. Add Comment only when helpful. Set requiresConfirmation=true for SpawnActorFromClass, DestroyActor, OpenLevel, console commands, save/delete, quit, or time dilation.\n"
+		"Return JSON only."
+	);
+}
+
+static FString BuildDslSystemPromptForCurrentProvider()
+{
+	if (const UBlueprintAIAssistantSettings* Settings = GetDefault<UBlueprintAIAssistantSettings>())
+	{
+		if (Settings->ProviderKind == EBlueprintAIProviderKind::OpenAICompatible)
+		{
+			return BuildCompactDslSystemPrompt();
+		}
+	}
+	return FBlueprintPromptBuilder::BuildSystemPromptDslJson();
+}
+
 static bool TryParseClarifyJson(const FString& Content, TArray<SBlueprintAIAssistantPanel::FClarifyQuestion>& OutQs, FString& OutError)
 {
 	OutQs.Reset();
@@ -2788,7 +2820,11 @@ FReply SBlueprintAIAssistantPanel::OnAskClicked()
 	int32 MaxPromptChars = 8000;
 	if (const UBlueprintAIAssistantSettings* AISettings = GetDefault<UBlueprintAIAssistantSettings>())
 	{
-		if (AISettings->ProviderKind == EBlueprintAIProviderKind::Doubao)
+		if (AISettings->ProviderKind == EBlueprintAIProviderKind::OpenAICompatible)
+		{
+			MaxPromptChars = 2500;
+		}
+		else if (AISettings->ProviderKind == EBlueprintAIProviderKind::Doubao)
 		{
 			MaxPromptChars = 3500;
 		}
@@ -3252,13 +3288,18 @@ void SBlueprintAIAssistantPanel::StartGenerateDslWithQuestion(const FString& Eff
 	}
 
 	FBlueprintAIRequest Request;
-	Request.SystemPrompt = FBlueprintPromptBuilder::BuildSystemPromptDslJson();
+	Request.SystemPrompt = BuildDslSystemPromptForCurrentProvider();
 	Request.UserPrompt = AugmentUserPromptWithMultiTurn(BaseUserPrompt, PrevDslForMultiturn);
+	Request.MaxOutputTokens = 3072;
 
 	int32 MaxPromptChars = 8000;
 	if (const UBlueprintAIAssistantSettings* AISettings = GetDefault<UBlueprintAIAssistantSettings>())
 	{
-		if (AISettings->ProviderKind == EBlueprintAIProviderKind::Doubao)
+		if (AISettings->ProviderKind == EBlueprintAIProviderKind::OpenAICompatible)
+		{
+			MaxPromptChars = 2500;
+		}
+		else if (AISettings->ProviderKind == EBlueprintAIProviderKind::Doubao)
 		{
 			MaxPromptChars = 3500;
 		}
@@ -3355,7 +3396,7 @@ void SBlueprintAIAssistantPanel::StartGenerateDslWithQuestion(const FString& Eff
 						};
 
 						FBlueprintAIRequest RetryReq;
-						RetryReq.SystemPrompt = FBlueprintPromptBuilder::BuildSystemPromptDslJson();
+						RetryReq.SystemPrompt = BuildDslSystemPromptForCurrentProvider();
 						RetryReq.UserPrompt = FString::Printf(
 							TEXT("你上一次输出的 DSL JSON 无法被解析或不符合 schema。\n")
 							TEXT("解析错误：%s\n\n")
@@ -3904,7 +3945,7 @@ FReply SBlueprintAIAssistantPanel::OnExecuteSelectedDslClicked()
 		};
 
 		FBlueprintAIRequest RetryReq;
-		RetryReq.SystemPrompt = FBlueprintPromptBuilder::BuildSystemPromptDslJson();
+		RetryReq.SystemPrompt = BuildDslSystemPromptForCurrentProvider();
 		RetryReq.UserPrompt = FString::Printf(
 			TEXT("下面这段 DSL steps 在 Unreal 蓝图里执行失败了。请你【只输出】修正后的 DSL JSON（一个 JSON 对象，包含 version 与 steps 数组），不要输出解释、不要输出 Markdown。\n\n")
 			TEXT("执行失败摘要：\n%s\n\n")
@@ -4150,7 +4191,7 @@ FReply SBlueprintAIAssistantPanel::OnExecuteOneDslStepClicked(int32 StepIndex)
 		};
 
 		FBlueprintAIRequest RetryReq;
-		RetryReq.SystemPrompt = FBlueprintPromptBuilder::BuildSystemPromptDslJson();
+		RetryReq.SystemPrompt = BuildDslSystemPromptForCurrentProvider();
 		RetryReq.UserPrompt = FString::Printf(
 			TEXT("下面这一步 DSL 在 Unreal 蓝图里执行失败了。请你【只输出】修正后的 DSL JSON（一个 JSON 对象，包含 version 与 steps 数组），不要输出解释、不要输出 Markdown。\n\n")
 			TEXT("失败摘要：\n%s\n\n")
