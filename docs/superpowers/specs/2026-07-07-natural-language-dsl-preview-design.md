@@ -1,104 +1,104 @@
-# Natural Language to DSL Preview Design
+# 自然语言生成 DSL 预览设计
 
-## Goal
+## 目标
 
-Let users describe a Blueprint change in natural language, then receive an executable DSL preview before making any Blueprint edits.
+让用户可以用自然语言描述一个蓝图改动，然后先得到一份可执行的 DSL 步骤预览，在真正修改蓝图之前进行检查。
 
-The default behavior must stay conservative: generation creates and selects DSL steps, but execution remains a separate user decision through the existing "execute selected steps" flow.
+默认行为必须保持保守：生成流程只创建并勾选 DSL 步骤，执行仍然由用户通过现有的“执行所选步骤”流程主动触发。
 
-## Current Flow
+## 当前流程
 
-The plugin already has most of the required pipeline:
+插件已经具备大部分所需链路：
 
-- `OnGenerateDslClicked` reads the text box and triages the request.
-- `TriageUserIntentForDsl` chooses direct DSL, clarification questions, or a cross-Blueprint plan.
-- `StartGenerateDslWithQuestion` sends the natural language request plus Blueprint context to the model.
-- `ParseDslStepsFromJson` parses the model response into `CurrentDslSteps`.
-- `RebuildDslPreview` displays selectable DSL rows.
-- `OnExecuteSelectedDslClicked` validates and executes only after the user clicks the execute button.
+- `OnGenerateDslClicked` 读取输入框，并对用户请求做分流。
+- `TriageUserIntentForDsl` 判断是直接生成 DSL、生成澄清问题，还是生成跨蓝图实施计划。
+- `StartGenerateDslWithQuestion` 把自然语言请求和当前蓝图上下文发送给模型。
+- `ParseDslStepsFromJson` 把模型响应解析为 `CurrentDslSteps`。
+- `RebuildDslPreview` 在面板中显示可勾选的 DSL 行。
+- `OnExecuteSelectedDslClicked` 只在用户点击执行按钮后进行校验和执行。
 
-This design keeps that architecture and improves the user-facing language around it.
+本设计保留这套架构，只改进用户能感知到的入口文案和成功提示，让它更明确地表达“可以直接输入自然语言”。
 
-## User Experience
+## 用户体验
 
-Primary path:
+主路径：
 
-1. User opens the relevant Blueprint.
-2. User types a natural language request, for example: "press E to line trace forward and open BP_Door_01".
-3. User clicks a generation button with clearer wording, such as "Generate Blueprint Steps" or "Natural Language to DSL".
-4. The plugin generates DSL and lists the steps in the existing preview panel.
-5. All generated steps are selected by default.
-6. The response text tells the user to review the generated steps before executing.
-7. User clicks the existing execute button only if the preview looks correct.
+1. 用户先打开相关蓝图。
+2. 用户输入自然语言需求，例如：“按 E 向前 LineTrace，命中 BP_Door_01 就开门”。
+3. 用户点击一个更清晰的生成按钮，例如“生成蓝图步骤”或“自然语言生成 DSL”。
+4. 插件生成 DSL，并在现有 DSL 预览区域列出步骤。
+5. 生成出的步骤默认全部勾选。
+6. 响应文本提示用户先检查生成步骤，再决定是否执行。
+7. 用户只有在确认预览没问题后，才点击现有的“执行所选步骤”按钮。
 
-If the request is ambiguous, the current clarification flow remains in charge. If it is cross-Blueprint or system-level, the current plan flow remains in charge.
+如果请求信息不足，继续使用现有澄清问题流程。如果请求明显涉及多个蓝图或系统级功能，继续使用现有跨蓝图实施计划流程。
 
-## Non-Goals
+## 非目标
 
-- Do not auto-execute immediately after model generation.
-- Do not hide the generated DSL preview.
-- Do not bypass validation, high-risk confirmation, manual prerequisite warnings, or undo tracking.
-- Do not reintroduce local hardcoded DSL templates.
-- Do not replace the current DSL schema or executor.
+- 不在模型生成完成后自动执行。
+- 不隐藏生成出来的 DSL 预览。
+- 不绕过校验、高风险确认、手动前置条件提示或撤销追踪。
+- 不重新引入本地硬编码 DSL 模板。
+- 不替换当前 DSL schema 或执行器。
 
-## Design Details
+## 设计细节
 
-### Entry Point
+### 入口
 
-Keep the existing generation entry point, but update the button text and status copy so users understand that natural language is accepted.
+保留现有生成入口，但更新按钮文案和状态提示，让用户知道可以直接输入自然语言。
 
-Suggested copy:
+建议文案：
 
-- Button: `Generate Blueprint Steps`
-- Tooltip: `Generate executable DSL steps from your natural language request. Review before executing.`
-- Success message: `DSL generated from natural language. Review the selected steps below, then click Execute Selected Steps if it looks right.`
+- 按钮：`生成蓝图步骤`
+- Tooltip：`根据自然语言需求生成可执行 DSL 步骤。请先检查，再决定是否执行。`
+- 成功提示：`已根据自然语言生成 DSL。请检查下方已勾选步骤，确认无误后再点击“执行所选步骤”。`
 
-The existing technical label can still mention DSL in a secondary hint so advanced users know what is being generated.
+可以在次级提示中继续保留 DSL 这个技术词，方便高级用户理解实际生成的内容。
 
-### Data Flow
+### 数据流
 
-The flow remains:
+流程保持不变：
 
-`Natural language request -> triage -> model prompt -> DSL JSON -> parser -> CurrentDslSteps -> preview -> user-triggered execution`
+`自然语言需求 -> 分流 -> 模型 Prompt -> DSL JSON -> 解析器 -> CurrentDslSteps -> 预览 -> 用户主动执行`
 
-No new execution path is needed for the conservative mode.
+保守模式不需要新增执行路径。
 
-### Safety Rules
+### 安全规则
 
-The design relies on existing safeguards:
+本设计继续依赖现有安全机制：
 
-- `ValidateSteps` blocks invalid DSL before execution.
-- `requiresConfirmation=true` continues to trigger a high-risk confirmation dialog.
-- Manual prerequisite summaries continue to warn when variables, functions, or assets may need user setup.
-- `Undo Last DSL` remains the rollback mechanism for executed changes.
-- Current parse retry and execution retry behavior remains unchanged.
+- `ValidateSteps` 在执行前阻止非法 DSL。
+- `requiresConfirmation=true` 继续触发高风险确认弹窗。
+- 手动前置条件摘要继续提示变量、函数或资产可能需要用户先补齐。
+- `撤销本次改动` 继续作为执行后的回退机制。
+- 现有解析失败重试和执行失败重试逻辑保持不变。
 
-### Settings
+### 设置项
 
-No new setting is required for the conservative default.
+保守默认模式不需要新增设置项。
 
-If a future automatic mode is desired, it should be a separate opt-in setting, disabled by default, and should not be part of this change.
+如果未来想做自动执行模式，应作为单独的可选设置，并且默认关闭；它不属于本次改动范围。
 
-## Implementation Plan
+## 实现计划
 
-1. Update the primary generation button label and tooltip in `SBlueprintAIAssistantPanel.cpp`.
-2. Update the success response copy after `CurrentDslSteps` is populated.
-3. Keep `OnExecuteSelectedDslClicked` as the only batch execution trigger.
-4. Keep clarification and plan triage unchanged.
-5. Compile the UE project plugin.
-6. Commit and push the implementation separately from this design commit.
+1. 更新 `SBlueprintAIAssistantPanel.cpp` 中主生成按钮的显示文案和 Tooltip。
+2. 更新 `CurrentDslSteps` 填充成功后的响应提示文案。
+3. 保持 `OnExecuteSelectedDslClicked` 作为唯一的批量执行入口。
+4. 保持澄清问题和跨蓝图计划分流逻辑不变。
+5. 编译 UE 项目插件。
+6. 将实现改动作为独立提交推送，不和本设计提交混在一起。
 
-## Validation
+## 验证方式
 
-Manual validation should cover:
+手动验证应覆盖：
 
-- Simple request: "show Hello from AI on BeginPlay" generates DSL preview and does not execute until clicked.
-- Interaction request: "press E to line trace forward and open BP_Door_01" generates DSL preview and does not execute until clicked.
-- Ambiguous request: "make an inventory system" still produces clarification or a plan instead of pretending to be a single safe DSL chain.
-- High-risk request: a generated high-risk step still requires confirmation before execution.
+- 简单请求：“BeginPlay 时在屏幕上显示 Hello from AI”会生成 DSL 预览，并且不会在点击执行前修改蓝图。
+- 交互请求：“按 E 向前 LineTrace，命中 BP_Door_01 就开门”会生成 DSL 预览，并且不会在点击执行前修改蓝图。
+- 模糊请求：“做一个背包系统”仍然进入澄清问题或实施计划流程，而不是伪装成一条安全的单蓝图 DSL。
+- 高风险请求：如果生成了高风险步骤，执行前仍然要求确认。
 
-Build validation:
+构建验证：
 
-- Run the UE editor target build for the project after implementation.
-- Confirm the plugin loads and the panel shows the updated copy.
+- 实现后运行 UE 编辑器目标构建。
+- 确认插件可以加载，面板显示更新后的中文文案。
 
