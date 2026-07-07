@@ -212,14 +212,57 @@ FString SerializeDslStepsToJson(const TArray<FBlueprintDslActionStep>& Steps, in
 
 static FString TrimJsonEnvelopeIfPresent(const FString& In)
 {
-	// DSL Prompt 要求严格 JSON，但为了容错（模型偶尔加前后缀），这里尝试截取首尾大括号。
-	const int32 FirstBrace = In.Find(TEXT("{"), ESearchCase::CaseSensitive);
-	const int32 LastBrace = In.Find(TEXT("}"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-	if (FirstBrace != INDEX_NONE && LastBrace != INDEX_NONE && LastBrace > FirstBrace)
+	// DSL Prompt 要求严格 JSON，但模型偶尔会加前后缀或 Markdown。
+	// 这里扫描第一个完整 JSON 对象，避免用“第一个 { 到最后一个 }”误吃掉额外文本。
+	const FString S = In.TrimStartAndEnd();
+	int32 Start = INDEX_NONE;
+	int32 Depth = 0;
+	bool bInString = false;
+	bool bEscape = false;
+	for (int32 i = 0; i < S.Len(); ++i)
 	{
-		return In.Mid(FirstBrace, LastBrace - FirstBrace + 1);
+		const TCHAR C = S[i];
+		if (bInString)
+		{
+			if (bEscape)
+			{
+				bEscape = false;
+			}
+			else if (C == TEXT('\\'))
+			{
+				bEscape = true;
+			}
+			else if (C == TEXT('"'))
+			{
+				bInString = false;
+			}
+			continue;
+		}
+
+		if (C == TEXT('"'))
+		{
+			bInString = true;
+			continue;
+		}
+		if (C == TEXT('{'))
+		{
+			if (Depth == 0)
+			{
+				Start = i;
+			}
+			++Depth;
+			continue;
+		}
+		if (C == TEXT('}') && Depth > 0)
+		{
+			--Depth;
+			if (Depth == 0 && Start != INDEX_NONE)
+			{
+				return S.Mid(Start, i - Start + 1);
+			}
+		}
 	}
-	return In;
+	return S;
 }
 
 /** 去掉 ``` / ```json 代码块外壳（模型常包一层 Markdown）。 */
@@ -341,6 +384,11 @@ static bool NormalizeAndDeserializeDslRoot(const FString& InRaw, TSharedPtr<FJso
 		if (!Braced.Equals(S) && TryDeserializeRootObject(Braced, OutRootObj))
 		{
 			return true;
+		}
+		if (!Braced.Equals(S))
+		{
+			S = Braced;
+			continue;
 		}
 
 		// 3) 整段是带引号的 JSON 字符串字面量：剥一层 + 反转义
@@ -977,4 +1025,3 @@ bool ParseDslStepsFromJson(const FString& InContent, TArray<FBlueprintDslActionS
 
 	return true;
 }
-
