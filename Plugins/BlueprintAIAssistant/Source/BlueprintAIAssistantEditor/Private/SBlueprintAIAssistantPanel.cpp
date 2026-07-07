@@ -350,6 +350,7 @@ static FString BuildCompactDslSystemPrompt()
 		"CreateNode fields: stepId, action, targetGraph, nodeId, nodeType, functionName, targetClass, cases, varName, defaultValue, requiresConfirmation, description.\n"
 		"ConnectPins fields: stepId, action, fromNodeId, fromPin, toNodeId, toPin, requiresConfirmation, description.\n"
 		"SetPinDefault fields: stepId, action, nodeId, pinName, defaultValue, requiresConfirmation, description.\n"
+		"Comment fields: stepId, action, targetGraph, commentText, attachToNodeIds, requiresConfirmation, description.\n"
 		"Allowed nodeType values include Branch, Sequence, DoOnce, Gate, Delay, InputKey, GetComponentByClass, SetTimerByFunctionName, ForEachLoop, SwitchOnInt, SwitchOnString, Select, MakeArrayInt, MakeArray, CallFunction, GetVariable, SetVariable, SpawnActorFromClass, Cast, IsValid, MakeVector, BreakVector, MakeRotator, BreakRotator.\n"
 		"Use existing Event BeginPlay as nodeId BeginPlay and connect from BeginPlay.then; do not create BeginPlay as CallFunction.\n"
 		"Exec pin names: input execute, output then. PrintString input string pin is InString. Delay output is Completed.\n"
@@ -371,6 +372,52 @@ static FString BuildDslSystemPromptForCurrentProvider()
 		}
 	}
 	return FBlueprintPromptBuilder::BuildSystemPromptDslJson();
+}
+
+static bool IsOpenAICompatibleProvider()
+{
+	if (const UBlueprintAIAssistantSettings* Settings = GetDefault<UBlueprintAIAssistantSettings>())
+	{
+		return Settings->ProviderKind == EBlueprintAIProviderKind::OpenAICompatible;
+	}
+	return false;
+}
+
+static FString JoinLimitedPromptItems(const TArray<FString>& Items, int32 MaxChars)
+{
+	if (Items.Num() == 0 || MaxChars <= 0)
+	{
+		return TEXT("none");
+	}
+
+	FString Out;
+	for (const FString& Item : Items)
+	{
+		const FString Clean = Item.TrimStartAndEnd();
+		if (Clean.IsEmpty())
+		{
+			continue;
+		}
+
+		const FString Next = Out.IsEmpty() ? Clean : (Out + TEXT(", ") + Clean);
+		if (Next.Len() > MaxChars)
+		{
+			return Out.IsEmpty() ? Clean.Left(MaxChars) : (Out + TEXT(", ..."));
+		}
+		Out = Next;
+	}
+	return Out.IsEmpty() ? TEXT("none") : Out;
+}
+
+static FString BuildCompactDslUserPrompt(const FBlueprintEditorContext& Context, const FString& UserQuestion)
+{
+	return FString::Printf(
+		TEXT("Current Blueprint:\nBlueprint=%s\nType=%s\nVariables=%s\nFunctions=%s\n\nUser request, preserve exactly and implement it:\n%s"),
+		*Context.BlueprintName,
+		*Context.BlueprintClass,
+		*JoinLimitedPromptItems(Context.Variables, 700),
+		*JoinLimitedPromptItems(Context.Functions, 500),
+		*UserQuestion);
 }
 
 static bool TryParseClarifyJson(const FString& Content, TArray<SBlueprintAIAssistantPanel::FClarifyQuestion>& OutQs, FString& OutError)
@@ -2802,7 +2849,9 @@ FReply SBlueprintAIAssistantPanel::OnAskClicked()
 	FString BaseUserPrompt;
 	if (bHasContext)
 	{
-		BaseUserPrompt = FBlueprintPromptBuilder::BuildUserPrompt(Context, UserQuestion);
+		BaseUserPrompt = IsOpenAICompatibleProvider()
+			? BuildCompactDslUserPrompt(Context, UserQuestion)
+			: FBlueprintPromptBuilder::BuildUserPrompt(Context, UserQuestion);
 	}
 	else
 	{
@@ -3277,7 +3326,9 @@ void SBlueprintAIAssistantPanel::StartGenerateDslWithQuestion(const FString& Eff
 	FString BaseUserPrompt;
 	if (bHasContext)
 	{
-		BaseUserPrompt = FBlueprintPromptBuilder::BuildUserPrompt(Context, UserQuestion);
+		BaseUserPrompt = IsOpenAICompatibleProvider()
+			? BuildCompactDslUserPrompt(Context, UserQuestion)
+			: FBlueprintPromptBuilder::BuildUserPrompt(Context, UserQuestion);
 	}
 	else
 	{
@@ -3289,7 +3340,9 @@ void SBlueprintAIAssistantPanel::StartGenerateDslWithQuestion(const FString& Eff
 
 	FBlueprintAIRequest Request;
 	Request.SystemPrompt = BuildDslSystemPromptForCurrentProvider();
-	Request.UserPrompt = AugmentUserPromptWithMultiTurn(BaseUserPrompt, PrevDslForMultiturn);
+	Request.UserPrompt = IsOpenAICompatibleProvider()
+		? BaseUserPrompt
+		: AugmentUserPromptWithMultiTurn(BaseUserPrompt, PrevDslForMultiturn);
 	Request.MaxOutputTokens = 3072;
 
 	int32 MaxPromptChars = 8000;
