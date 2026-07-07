@@ -1,0 +1,65 @@
+{
+  "name": "execute_int_math_alias",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 0,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "Int + Int（语义别名覆盖）",
+        "targetGraph": "EventGraph",
+        "nodeId": "AddInt",
+        "nodeType": "CallFunction",
+        "functionName": "Int + Int"
+      },
+      {
+        "stepId": "S3",
+        "action": "SetPinDefault",
+        "description": "A=2",
+        "nodeId": "AddInt",
+        "pinName": "A",
+        "defaultValue": "2"
+      },
+      {
+        "stepId": "S4",
+        "action": "SetPinDefault",
+        "description": "B=3",
+        "nodeId": "AddInt",
+        "pinName": "B",
+        "defaultValue": "3"
+      },
+      {
+        "stepId": "S5",
+        "action": "CreateNode",
+        "description": "PrintString",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S6",
+        "action": "ConnectPins",
+        "description": "BeginPlay -> Print",
+        "fromNodeId": "BeginPlay",
+        "fromPin": "then",
+        "toNodeId": "Print",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S7",
+        "action": "ConnectPins",
+        "description": "把 AddInt.ReturnValue 连接到 Print.InString（可能触发 ToString/隐式转换路径）",
+        "fromNodeId": "AddInt",
+        "fromPin": "ReturnValue",
+        "toNodeId": "Print",
+        "toPin": "InString"
+      }
+    ]
+  }
+}
+

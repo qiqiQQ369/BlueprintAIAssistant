@@ -1,0 +1,8 @@
+{
+	"BuildId": "43139311",
+	"Modules": 
+	{
+		"BlueprintAIAssistantEditor": "UnrealEditor-BlueprintAIAssistantEditor.dll",
+		"BlueprintAIAssistantRuntime": "UnrealEditor-BlueprintAIAssistantRuntime.dll"
+	}
+}

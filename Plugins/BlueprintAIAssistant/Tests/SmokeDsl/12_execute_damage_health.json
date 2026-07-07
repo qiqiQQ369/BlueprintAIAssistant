@@ -1,0 +1,109 @@
+{
+  "name": "execute_damage_health",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 2,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "CreateMemberVariable",
+        "description": "Health 变量",
+        "varName": "Health",
+        "varType": { "type": "float" }
+      },
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "Health - Damage",
+        "targetGraph": "EventGraph",
+        "nodeId": "Sub_Health",
+        "nodeType": "CallFunction",
+        "functionName": "Float - Float"
+      },
+      {
+        "stepId": "S3",
+        "action": "CreateNode",
+        "description": "读取 Health",
+        "targetGraph": "EventGraph",
+        "nodeId": "Get_Health",
+        "nodeType": "GetVariable",
+        "varName": "Health"
+      },
+      {
+        "stepId": "S4",
+        "action": "CreateNode",
+        "description": "写回 Health",
+        "targetGraph": "EventGraph",
+        "nodeId": "Set_Health",
+        "nodeType": "SetVariable",
+        "varName": "Health"
+      },
+      {
+        "stepId": "S5",
+        "action": "CreateNode",
+        "description": "打印当前血量",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print_Health",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S6",
+        "action": "ConnectPins",
+        "description": "AnyDamage 触发",
+        "fromNodeId": "AnyDamage",
+        "fromPin": "then",
+        "toNodeId": "Set_Health",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S7",
+        "action": "ConnectPins",
+        "description": "Health -> Subtract A",
+        "fromNodeId": "Get_Health",
+        "fromPin": "Health",
+        "toNodeId": "Sub_Health",
+        "toPin": "A"
+      },
+      {
+        "stepId": "S8",
+        "action": "ConnectPins",
+        "description": "Damage -> Subtract（InFloat 别名兜底）",
+        "fromNodeId": "AnyDamage",
+        "fromPin": "Damage",
+        "toNodeId": "Sub_Health",
+        "toPin": "InFloat"
+      },
+      {
+        "stepId": "S9",
+        "action": "ConnectPins",
+        "description": "Subtract 结果 -> Set",
+        "fromNodeId": "Sub_Health",
+        "fromPin": "ReturnValue",
+        "toNodeId": "Set_Health",
+        "toPin": "Health"
+      },
+      {
+        "stepId": "S10",
+        "action": "ConnectPins",
+        "description": "Set -> Print",
+        "fromNodeId": "Set_Health",
+        "fromPin": "then",
+        "toNodeId": "Print_Health",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S11",
+        "action": "ConnectPins",
+        "description": "float -> Print.InString（自动 Conv_ToString）",
+        "fromNodeId": "Sub_Health",
+        "fromPin": "ReturnValue",
+        "toNodeId": "Print_Health",
+        "toPin": "InString"
+      }
+    ]
+  }
+}

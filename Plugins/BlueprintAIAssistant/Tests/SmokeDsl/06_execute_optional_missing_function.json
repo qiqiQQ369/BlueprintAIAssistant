@@ -1,0 +1,58 @@
+{
+  "name": "execute_optional_missing_function",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 0,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "（可选）调用一个不存在的函数：若函数不存在可跳过",
+        "targetGraph": "EventGraph",
+        "nodeId": "OptionalMissing",
+        "nodeType": "CallFunction",
+        "functionName": "DefinitelyNotExist_Optional",
+        "commentText": "optional：若函数不存在可跳过"
+      },
+      {
+        "stepId": "S3",
+        "action": "CreateNode",
+        "description": "PrintString",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S4",
+        "action": "SetPinDefault",
+        "description": "Print text",
+        "nodeId": "Print",
+        "pinName": "InString",
+        "defaultValue": "AfterOptional"
+      },
+      {
+        "stepId": "S5",
+        "action": "ConnectPins",
+        "description": "BeginPlay -> Optional",
+        "fromNodeId": "BeginPlay",
+        "fromPin": "then",
+        "toNodeId": "OptionalMissing",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S6",
+        "action": "ConnectPins",
+        "description": "Optional -> Print（若 Optional 被跳过，执行器应自动桥接）",
+        "fromNodeId": "OptionalMissing",
+        "fromPin": "then",
+        "toNodeId": "Print",
+        "toPin": "execute"
+      }
+    ]
+  }
+}
+

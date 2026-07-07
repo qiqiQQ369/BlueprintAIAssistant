@@ -1,0 +1,17 @@
+# Local/editor state
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Unreal generated state
+Saved/
+Intermediate/
+DerivedDataCache/
+
+# Local packaging/output scratch
+*.zip
+*.7z
+*.rar

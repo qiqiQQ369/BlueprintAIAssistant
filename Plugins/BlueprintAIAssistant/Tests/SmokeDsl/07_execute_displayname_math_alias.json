@@ -1,0 +1,90 @@
+{
+  "name": "execute_displayname_math_alias",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 0,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "CreateNode",
+        "description": "Equal (Int) (display name alias)",
+        "targetGraph": "EventGraph",
+        "nodeId": "EqInt",
+        "nodeType": "CallFunction",
+        "functionName": "Equal (Int)"
+      },
+      {
+        "stepId": "S2",
+        "action": "SetPinDefault",
+        "description": "A=1",
+        "nodeId": "EqInt",
+        "pinName": "A",
+        "defaultValue": "1"
+      },
+      {
+        "stepId": "S3",
+        "action": "SetPinDefault",
+        "description": "B=1",
+        "nodeId": "EqInt",
+        "pinName": "B",
+        "defaultValue": "1"
+      },
+      {
+        "stepId": "S4",
+        "action": "CreateNode",
+        "description": "Add (Float) (display name alias)",
+        "targetGraph": "EventGraph",
+        "nodeId": "AddFloat",
+        "nodeType": "CallFunction",
+        "functionName": "Add (Float)"
+      },
+      {
+        "stepId": "S5",
+        "action": "SetPinDefault",
+        "description": "A=2.5",
+        "nodeId": "AddFloat",
+        "pinName": "A",
+        "defaultValue": "2.5"
+      },
+      {
+        "stepId": "S6",
+        "action": "SetPinDefault",
+        "description": "B=7.5",
+        "nodeId": "AddFloat",
+        "pinName": "B",
+        "defaultValue": "7.5"
+      },
+      {
+        "stepId": "S7",
+        "action": "CreateNode",
+        "description": "PrintString",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S8",
+        "action": "ConnectPins",
+        "description": "BeginPlay -> Print",
+        "fromNodeId": "BeginPlay",
+        "fromPin": "then",
+        "toNodeId": "Print",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S9",
+        "action": "ConnectPins",
+        "description": "EqInt.ReturnValue -> Print.InString",
+        "fromNodeId": "EqInt",
+        "fromPin": "ReturnValue",
+        "toNodeId": "Print",
+        "toPin": "InString"
+      }
+    ]
+  }
+}
+

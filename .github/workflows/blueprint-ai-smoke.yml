@@ -1,0 +1,58 @@
+# Blueprint AI Assistant headless smoke (requires a Windows runner with UE 5.6 editor installed).
+#
+# Setup:
+#   1. Register a self-hosted runner with labels: self-hosted, windows, ue5
+#   2. Set repository variable UE_ENGINE_ROOT (e.g. C:\Program Files\Epic Games\UE_5.6)
+#      or ensure the default path in scripts/build-uecpp.ps1 exists on the runner.
+#
+# Manual run: Actions → Blueprint AI Smoke → Run workflow
+
+name: Blueprint AI Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'Plugins/BlueprintAIAssistant/**'
+      - 'scripts/run-blueprint-ai-smoke.ps1'
+      - 'scripts/build-uecpp.ps1'
+      - '.github/workflows/blueprint-ai-smoke.yml'
+  pull_request:
+    paths:
+      - 'Plugins/BlueprintAIAssistant/**'
+      - 'scripts/run-blueprint-ai-smoke.ps1'
+      - 'scripts/build-uecpp.ps1'
+
+jobs:
+  smoke:
+    name: Headless smoke
+    runs-on: [self-hosted, windows, ue5]
+    timeout-minutes: 30
+
+    env:
+      UE_ENGINE_ROOT: ${{ vars.UE_ENGINE_ROOT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build UECPPEditor (if needed)
+        shell: pwsh
+        run: |
+          $engineRoot = if ($env:UE_ENGINE_ROOT) { $env:UE_ENGINE_ROOT } else { 'C:\Program Files\Epic Games\UE_5.6' }
+          & ./scripts/build-uecpp.ps1 -Project "$PWD/UECPP.uproject"
+
+      - name: Run BlueprintAIAssistant smoke
+        shell: pwsh
+        run: |
+          $engineRoot = if ($env:UE_ENGINE_ROOT) { $env:UE_ENGINE_ROOT } else { 'C:\Program Files\Epic Games\UE_5.6' }
+          & ./scripts/run-blueprint-ai-smoke.ps1 -EngineRoot $engineRoot -Project "$PWD/UECPP.uproject"
+
+      - name: Upload smoke summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blueprint-ai-smoke-summary
+          path: Saved/BlueprintAIAssistant/smoke/smoke-summary-*.md
+          if-no-files-found: ignore

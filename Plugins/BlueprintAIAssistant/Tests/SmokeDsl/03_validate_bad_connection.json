@@ -1,0 +1,31 @@
+{
+  "name": "validate_bad_connection",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 0,
+  "expectExecuteOk": false,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "PrintString",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S3",
+        "action": "ConnectPins",
+        "description": "错误连线：把数据引脚接到执行引脚（应在预检/执行中失败）",
+        "fromNodeId": "Print",
+        "fromPin": "InString",
+        "toNodeId": "Print",
+        "toPin": "execute"
+      }
+    ]
+  }
+}
+

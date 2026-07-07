@@ -1,0 +1,65 @@
+{
+  "name": "execute_beginplay_print",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 0,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "Delay 0.01",
+        "targetGraph": "EventGraph",
+        "nodeId": "Delay",
+        "nodeType": "CallFunction",
+        "functionName": "Delay"
+      },
+      {
+        "stepId": "S3",
+        "action": "SetPinDefault",
+        "description": "Delay duration",
+        "nodeId": "Delay",
+        "pinName": "Duration",
+        "defaultValue": "0.01"
+      },
+      {
+        "stepId": "S4",
+        "action": "CreateNode",
+        "description": "PrintString",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S5",
+        "action": "SetPinDefault",
+        "description": "Print text",
+        "nodeId": "Print",
+        "pinName": "InString",
+        "defaultValue": "SmokeExecOK"
+      },
+      {
+        "stepId": "S6",
+        "action": "ConnectPins",
+        "description": "BeginPlay -> Delay",
+        "fromNodeId": "BeginPlay",
+        "fromPin": "then",
+        "toNodeId": "Delay",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S7",
+        "action": "ConnectPins",
+        "description": "Delay -> Print",
+        "fromNodeId": "Delay",
+        "fromPin": "then",
+        "toNodeId": "Print",
+        "toPin": "execute"
+      }
+    ]
+  }
+}
+

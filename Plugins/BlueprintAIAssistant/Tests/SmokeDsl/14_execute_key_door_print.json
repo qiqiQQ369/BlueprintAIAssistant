@@ -1,0 +1,47 @@
+{
+  "name": "execute_key_door_print",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 2,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "CreateNode",
+        "description": "误写 InputAction 为 CallFunction",
+        "targetGraph": "EventGraph",
+        "nodeId": "KeyEvent",
+        "nodeType": "CallFunction",
+        "functionName": "InputAction E"
+      },
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "开门提示",
+        "targetGraph": "EventGraph",
+        "nodeId": "Print_Open",
+        "nodeType": "CallFunction",
+        "functionName": "PrintString"
+      },
+      {
+        "stepId": "S3",
+        "action": "SetPinDefault",
+        "description": "text",
+        "nodeId": "Print_Open",
+        "pinName": "InString",
+        "defaultValue": "Open Door"
+      },
+      {
+        "stepId": "S4",
+        "action": "ConnectPins",
+        "description": "Pressed -> Print",
+        "fromNodeId": "KeyEvent",
+        "fromPin": "Pressed",
+        "toNodeId": "Print_Open",
+        "toPin": "execute"
+      }
+    ]
+  }
+}

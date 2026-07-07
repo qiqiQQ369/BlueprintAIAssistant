@@ -1,0 +1,28 @@
+{
+  "name": "parse_sanitize_aliases",
+  "mode": "parse",
+  "expectParseOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "create_node",
+        "description": "Event BeginPlay (action小写 + 下划线，依赖清洗)",
+        "targetGraph": "EventGraph",
+        "nodeId": "Event BeginPlay",
+        "nodeType": "EventBeginPlay"
+      },
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "GetVariable 用变量别名字段 name/variable",
+        "targetGraph": "EventGraph",
+        "nodeId": "GetHealth",
+        "nodeType": "GetVariable",
+        "name": "Health"
+      }
+    ]
+  }
+}
+

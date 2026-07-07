@@ -1,0 +1,43 @@
+{
+  "name": "execute_set_timer_by_function_name",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 1,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "CreateNode",
+        "description": "BeginPlay 后启动 0.5s 定时器",
+        "targetGraph": "EventGraph",
+        "nodeId": "TimerNode",
+        "nodeType": "SetTimerByFunctionName",
+        "functionName": "OnSmokeTimer",
+        "defaultValue": "0.5"
+      },
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "CallFunction 别名路径",
+        "targetGraph": "EventGraph",
+        "nodeId": "TimerAlias",
+        "nodeType": "CallFunction",
+        "functionName": "Set Timer by Function Name",
+        "varName": "OnSmokeTimerAlias",
+        "defaultValue": "1.0",
+        "cases": ["false"]
+      },
+      {
+        "stepId": "S3",
+        "action": "ConnectPins",
+        "description": "BeginPlay -> Timer",
+        "fromNodeId": "BeginPlay",
+        "fromPin": "then",
+        "toNodeId": "TimerNode",
+        "toPin": "execute"
+      }
+    ]
+  }
+}

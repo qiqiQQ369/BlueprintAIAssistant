@@ -1,0 +1,156 @@
+{
+  "name": "execute_coin_pickup",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 2,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "CreateNode",
+        "description": "Cast OtherActor 到 Character",
+        "targetGraph": "EventGraph",
+        "nodeId": "Cast_ToCharacter",
+        "nodeType": "Cast",
+        "targetClass": "Character"
+      },
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "读取玩家 CoinCount",
+        "targetGraph": "EventGraph",
+        "nodeId": "Get_CoinCount",
+        "nodeType": "GetVariable",
+        "varName": "CoinCount"
+      },
+      {
+        "stepId": "S3",
+        "action": "CreateNode",
+        "description": "CoinCount + 1",
+        "targetGraph": "EventGraph",
+        "nodeId": "Add_CoinCount",
+        "nodeType": "CallFunction",
+        "functionName": "Int + Int"
+      },
+      {
+        "stepId": "S4",
+        "action": "CreateNode",
+        "description": "写回 CoinCount",
+        "targetGraph": "EventGraph",
+        "nodeId": "Set_CoinCount",
+        "nodeType": "SetVariable",
+        "varName": "CoinCount"
+      },
+      {
+        "stepId": "S5",
+        "action": "CreateNode",
+        "description": "可选：刷新 UI",
+        "targetGraph": "EventGraph",
+        "nodeId": "Call_UpdateCoinUI",
+        "nodeType": "CallFunction",
+        "functionName": "UpdateCoinUI"
+      },
+      {
+        "stepId": "S6",
+        "action": "CreateNode",
+        "description": "销毁金币",
+        "targetGraph": "EventGraph",
+        "nodeId": "Destroy_Self",
+        "nodeType": "CallFunction",
+        "functionName": "DestroyActor",
+        "requiresConfirmation": true
+      },
+      {
+        "stepId": "S7",
+        "action": "ConnectPins",
+        "description": "Overlap 触发",
+        "fromNodeId": "OnComponentBeginOverlap",
+        "fromPin": "then",
+        "toNodeId": "Cast_ToCharacter",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S8",
+        "action": "ConnectPins",
+        "description": "OtherActor -> Cast",
+        "fromNodeId": "OnComponentBeginOverlap",
+        "fromPin": "OtherActor",
+        "toNodeId": "Cast_ToCharacter",
+        "toPin": "Object"
+      },
+      {
+        "stepId": "S9",
+        "action": "ConnectPins",
+        "description": "Cast 成功 -> Set",
+        "fromNodeId": "Cast_ToCharacter",
+        "fromPin": "Cast Succeeded",
+        "toNodeId": "Set_CoinCount",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S10",
+        "action": "ConnectPins",
+        "description": "Cast 输出 -> Get self（常见误连，执行器应修正）",
+        "fromNodeId": "Cast_ToCharacter",
+        "fromPin": "Object",
+        "toNodeId": "Get_CoinCount",
+        "toPin": "self"
+      },
+      {
+        "stepId": "S11",
+        "action": "ConnectPins",
+        "description": "CoinCount -> Add A",
+        "fromNodeId": "Get_CoinCount",
+        "fromPin": "CoinCount",
+        "toNodeId": "Add_CoinCount",
+        "toPin": "A"
+      },
+      {
+        "stepId": "S12",
+        "action": "SetPinDefault",
+        "description": "加 1",
+        "nodeId": "Add_CoinCount",
+        "pinName": "B",
+        "defaultValue": "1"
+      },
+      {
+        "stepId": "S13",
+        "action": "ConnectPins",
+        "description": "Cast 输出 -> Set self",
+        "fromNodeId": "Cast_ToCharacter",
+        "fromPin": "Object",
+        "toNodeId": "Set_CoinCount",
+        "toPin": "self"
+      },
+      {
+        "stepId": "S14",
+        "action": "ConnectPins",
+        "description": "Add 结果 -> Set",
+        "fromNodeId": "Add_CoinCount",
+        "fromPin": "ReturnValue",
+        "toNodeId": "Set_CoinCount",
+        "toPin": "CoinCount"
+      },
+      {
+        "stepId": "S15",
+        "action": "ConnectPins",
+        "description": "Set -> 可选 UI",
+        "fromNodeId": "Set_CoinCount",
+        "fromPin": "then",
+        "toNodeId": "Call_UpdateCoinUI",
+        "toPin": "execute"
+      },
+      {
+        "stepId": "S16",
+        "action": "ConnectPins",
+        "description": "UI -> Destroy（可选节点缺失时应桥接）",
+        "fromNodeId": "Call_UpdateCoinUI",
+        "fromPin": "then",
+        "toNodeId": "Destroy_Self",
+        "toPin": "execute"
+      }
+    ]
+  }
+}

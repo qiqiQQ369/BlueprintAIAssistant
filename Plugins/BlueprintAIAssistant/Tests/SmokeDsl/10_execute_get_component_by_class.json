@@ -1,0 +1,31 @@
+{
+  "name": "execute_get_component_by_class",
+  "mode": "execute",
+  "expectParseOk": true,
+  "expectValidateErrorsMax": 1,
+  "expectExecuteOk": true,
+  "dsl": {
+    "version": 2,
+    "steps": [
+      {
+        "stepId": "S1",
+        "action": "CreateNode",
+        "description": "Get scene component by class",
+        "targetGraph": "EventGraph",
+        "nodeId": "GetRoot",
+        "nodeType": "GetComponentByClass",
+        "targetClass": "SceneComponent"
+      },
+      {
+        "stepId": "S2",
+        "action": "CreateNode",
+        "description": "CallFunction alias path",
+        "targetGraph": "EventGraph",
+        "nodeId": "GetMesh",
+        "nodeType": "CallFunction",
+        "functionName": "Get Component by Class",
+        "targetClass": "SceneComponent"
+      }
+    ]
+  }
+}
