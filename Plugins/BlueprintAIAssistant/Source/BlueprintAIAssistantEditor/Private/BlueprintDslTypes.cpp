@@ -545,6 +545,10 @@ static FString NormalizeActionString(FString In)
 	if (A.Equals(TEXT("getvariable"), ESearchCase::IgnoreCase)) return TEXT("GetVariable");
 	if (A.Equals(TEXT("set_variable"), ESearchCase::IgnoreCase)) return TEXT("SetVariable");
 	if (A.Equals(TEXT("setvariable"), ESearchCase::IgnoreCase)) return TEXT("SetVariable");
+	if (A.Equals(TEXT("create_member_variable"), ESearchCase::IgnoreCase)) return TEXT("CreateMemberVariable");
+	if (A.Equals(TEXT("createmembervariable"), ESearchCase::IgnoreCase)) return TEXT("CreateMemberVariable");
+	if (A.Equals(TEXT("create_function_graph"), ESearchCase::IgnoreCase)) return TEXT("CreateFunctionGraph");
+	if (A.Equals(TEXT("createfunctiongraph"), ESearchCase::IgnoreCase)) return TEXT("CreateFunctionGraph");
 
 	// 兜底：如果本来就是 CreateNode/ConnectPins 等，保持原样
 	return In.TrimStartAndEnd();
@@ -601,6 +605,10 @@ static FString NormalizeSimpleTypeName(FString In)
 	{
 		return Lower;
 	}
+	if (Lower.Equals(TEXT("widget")) || Lower.Equals(TEXT("userwidget")))
+	{
+		return TEXT("UserWidget");
+	}
 
 	return TEXT("");
 }
@@ -613,6 +621,10 @@ static FString InferSimpleTypeFromVarName(const FString& InVarName)
 		return TEXT("");
 	}
 
+	if (Name.Contains(TEXT("widget")))
+	{
+		return TEXT("UserWidget");
+	}
 	if (Name.Contains(TEXT("health")) || Name.Contains(TEXT("hp")) || Name.Contains(TEXT("damage")) ||
 		Name.Contains(TEXT("speed")) || Name.Contains(TEXT("rate")) || Name.Contains(TEXT("time")))
 	{
@@ -632,6 +644,20 @@ static FString InferSimpleTypeFromVarName(const FString& InVarName)
 		return TEXT("name");
 	}
 
+	return TEXT("");
+}
+
+static FString InferSimpleTypeRefFromVarName(const FString& InVarName)
+{
+	const FString Name = InVarName.TrimStartAndEnd().ToLower();
+	if (Name.Contains(TEXT("class")))
+	{
+		return TEXT("class");
+	}
+	if (Name.Contains(TEXT("ref")) || Name.Contains(TEXT("reference")) || Name.Contains(TEXT("instance")) || Name.Contains(TEXT("widget")))
+	{
+		return TEXT("object");
+	}
 	return TEXT("");
 }
 
@@ -703,6 +729,7 @@ static void CanonicalizeCreateMemberVariableType(const TSharedPtr<FJsonObject>& 
 	}
 
 	FString TypeText;
+	FString RefText;
 	FString Candidate;
 	if (StepObj->TryGetStringField(TEXT("varType"), Candidate))
 	{
@@ -721,6 +748,7 @@ static void CanonicalizeCreateMemberVariableType(const TSharedPtr<FJsonObject>& 
 		FString VarName;
 		ParseVarNameAliases(StepObj, VarName);
 		TypeText = InferSimpleTypeFromVarName(VarName);
+		RefText = InferSimpleTypeRefFromVarName(VarName);
 	}
 	if (TypeText.IsEmpty() && (StepObj->TryGetStringField(TEXT("defaultValue"), Candidate) || StepObj->TryGetStringField(TEXT("value"), Candidate)))
 	{
@@ -733,7 +761,101 @@ static void CanonicalizeCreateMemberVariableType(const TSharedPtr<FJsonObject>& 
 
 	TSharedRef<FJsonObject> TypeObj = MakeShared<FJsonObject>();
 	TypeObj->SetStringField(TEXT("type"), TypeText);
+	if (!RefText.IsEmpty())
+	{
+		TypeObj->SetStringField(TEXT("ref"), RefText);
+	}
 	StepObj->SetObjectField(TEXT("varType"), TypeObj);
+}
+
+static FString NormalizeFunctionGraphKind(FString In)
+{
+	FString K = In.TrimStartAndEnd();
+	K.ReplaceInline(TEXT(" "), TEXT(""));
+	K.ReplaceInline(TEXT("_"), TEXT(""));
+	const FString Lower = K.ToLower();
+	if (Lower.Equals(TEXT("callable")) || Lower.Equals(TEXT("function")))
+	{
+		return TEXT("Callable");
+	}
+	if (Lower.Equals(TEXT("pure")) || Lower.Equals(TEXT("purefunction")))
+	{
+		return TEXT("Pure");
+	}
+	if (Lower.Equals(TEXT("event")) || Lower.Equals(TEXT("customevent")) || Lower.Equals(TEXT("custom_event")))
+	{
+		return TEXT("Event");
+	}
+	if (Lower.Equals(TEXT("macro")))
+	{
+		return TEXT("Macro");
+	}
+	return TEXT("");
+}
+
+static void CanonicalizeCreateFunctionGraphFields(const TSharedPtr<FJsonObject>& StepObj)
+{
+	if (!StepObj.IsValid())
+	{
+		return;
+	}
+
+	FString Name;
+	if (!StepObj->TryGetStringField(TEXT("name"), Name) || Name.TrimStartAndEnd().IsEmpty())
+	{
+		FString Candidate;
+		if (StepObj->TryGetStringField(TEXT("functionName"), Candidate) ||
+			StepObj->TryGetStringField(TEXT("graphName"), Candidate) ||
+			StepObj->TryGetStringField(TEXT("function"), Candidate) ||
+			StepObj->TryGetStringField(TEXT("eventName"), Candidate) ||
+			StepObj->TryGetStringField(TEXT("macroName"), Candidate))
+		{
+			if (!Candidate.TrimStartAndEnd().IsEmpty())
+			{
+				StepObj->SetStringField(TEXT("name"), Candidate.TrimStartAndEnd());
+			}
+		}
+	}
+
+	FString Kind;
+	if (!StepObj->TryGetStringField(TEXT("kind"), Kind) || Kind.TrimStartAndEnd().IsEmpty())
+	{
+		FString Candidate;
+		if (StepObj->TryGetStringField(TEXT("graphKind"), Candidate) ||
+			StepObj->TryGetStringField(TEXT("functionKind"), Candidate) ||
+			StepObj->TryGetStringField(TEXT("type"), Candidate))
+		{
+			Kind = NormalizeFunctionGraphKind(Candidate);
+		}
+
+		bool bPure = false;
+		if (Kind.IsEmpty() && TryGetBoolLoose(StepObj, TEXT("pure"), bPure) && bPure)
+		{
+			Kind = TEXT("Pure");
+		}
+		if (Kind.IsEmpty() && StepObj->HasField(TEXT("eventName")))
+		{
+			Kind = TEXT("Event");
+		}
+		if (Kind.IsEmpty() && StepObj->HasField(TEXT("macroName")))
+		{
+			Kind = TEXT("Macro");
+		}
+		if (Kind.IsEmpty())
+		{
+			Kind = TEXT("Callable");
+		}
+
+		StepObj->SetStringField(TEXT("kind"), Kind);
+	}
+	else
+	{
+		const FString Normalized = NormalizeFunctionGraphKind(Kind);
+		if (!Normalized.IsEmpty() && !Normalized.Equals(Kind))
+		{
+			StepObj->SetStringField(TEXT("kind"), Normalized);
+		}
+	}
 }
 
 static EBlueprintDslActionType InferActionTypeFromFields(const TSharedPtr<FJsonObject>& StepObj)
@@ -764,6 +886,13 @@ static EBlueprintDslActionType InferActionTypeFromFields(const TSharedPtr<FJsonO
 	if (StepObj->HasField(TEXT("commentText")) || StepObj->HasField(TEXT("attachToNodeIds")))
 	{
 		return EBlueprintDslActionType::Comment;
+	}
+	if ((StepObj->HasField(TEXT("name")) || StepObj->HasField(TEXT("functionName")) || StepObj->HasField(TEXT("graphName")) ||
+		StepObj->HasField(TEXT("eventName")) || StepObj->HasField(TEXT("macroName"))) &&
+		(StepObj->HasField(TEXT("kind")) || StepObj->HasField(TEXT("graphKind")) || StepObj->HasField(TEXT("functionKind")) ||
+			StepObj->HasField(TEXT("bodySteps")) || StepObj->HasField(TEXT("params")) || StepObj->HasField(TEXT("returns"))))
+	{
+		return EBlueprintDslActionType::CreateFunctionGraph;
 	}
 	// 函数/宏创建特征
 	if (StepObj->HasField(TEXT("kind")) && (StepObj->HasField(TEXT("name")) || StepObj->HasField(TEXT("params")) || StepObj->HasField(TEXT("returns"))))
@@ -835,6 +964,10 @@ static void CanonicalizeStepObject(const TSharedPtr<FJsonObject>& StepObj)
 		if (A.Equals(TEXT("CreateMemberVariable"), ESearchCase::IgnoreCase))
 		{
 			CanonicalizeCreateMemberVariableType(StepObj);
+		}
+		else if (A.Equals(TEXT("CreateFunctionGraph"), ESearchCase::IgnoreCase))
+		{
+			CanonicalizeCreateFunctionGraphFields(StepObj);
 		}
 	}
 
