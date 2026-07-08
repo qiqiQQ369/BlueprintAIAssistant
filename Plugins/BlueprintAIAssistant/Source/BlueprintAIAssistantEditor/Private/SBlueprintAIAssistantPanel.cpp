@@ -344,8 +344,9 @@ static FString GetProviderSummaryLine()
 static FString BuildCompactDslSystemPrompt()
 {
 	return TEXT(
-		"You are an Unreal Engine 5.6 Blueprint automation assistant. Output only one valid JSON object, no Markdown.\n"
+		"You are an Unreal Engine 5.6 Blueprint automation assistant. Think in Simplified Chinese and output only one valid JSON object, no Markdown.\n"
 		"Schema: {\"version\":2,\"steps\":[step,...]}.\n"
+		"Use Simplified Chinese for all human-readable fields such as description and commentText. Keep blueprint identifiers, nodeType, functionName, pin names, varName, and targetClass in their original engine naming.\n"
 		"Step actions: CreateNode, ConnectPins, SetPinDefault, Comment, GetVariable, SetVariable, CreateMemberVariable, CreateFunctionGraph.\n"
 		"CreateNode fields: stepId, action, targetGraph, nodeId, nodeType, functionName, targetClass, cases, varName, defaultValue, requiresConfirmation, description.\n"
 		"ConnectPins fields: stepId, action, fromNodeId, fromPin, toNodeId, toPin, requiresConfirmation, description.\n"
@@ -685,20 +686,233 @@ static FString DslActionTypeToDisplayString(EBlueprintDslActionType Type)
 	switch (Type)
 	{
 	case EBlueprintDslActionType::CreateNode:
-		return TEXT("CreateNode");
+		return TEXT("创建节点");
 	case EBlueprintDslActionType::ConnectPins:
-		return TEXT("ConnectPins");
+		return TEXT("连接引脚");
 	case EBlueprintDslActionType::SetPinDefault:
-		return TEXT("SetPinDefault");
+		return TEXT("设置默认值");
 	case EBlueprintDslActionType::Comment:
-		return TEXT("Comment");
+		return TEXT("注释");
 	case EBlueprintDslActionType::GetVariable:
-		return TEXT("GetVariable");
+		return TEXT("读取变量");
 	case EBlueprintDslActionType::SetVariable:
-		return TEXT("SetVariable");
+		return TEXT("写入变量");
+	case EBlueprintDslActionType::CreateMemberVariable:
+		return TEXT("创建成员变量");
+	case EBlueprintDslActionType::CreateFunctionGraph:
+		return TEXT("创建函数图");
 	default:
-		return TEXT("Unknown");
+		return TEXT("未知步骤");
 	}
+}
+
+static bool ContainsCjkText(const FString& InText)
+{
+	for (TCHAR Ch : InText)
+	{
+		const uint32 Code = static_cast<uint32>(Ch);
+		if ((Code >= 0x3400 && Code <= 0x4DBF) || (Code >= 0x4E00 && Code <= 0x9FFF))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static FString LocalizeGraphNameForUi(const FString& InGraph)
+{
+	const FString Graph = InGraph.TrimStartAndEnd();
+	if (Graph.IsEmpty())
+	{
+		return TEXT("当前图");
+	}
+	if (Graph.Equals(TEXT("EventGraph"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("事件图表");
+	}
+	if (Graph.StartsWith(TEXT("Function:"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("函数图 ") + Graph.Mid(9);
+	}
+	if (Graph.StartsWith(TEXT("Macro:"), ESearchCase::IgnoreCase))
+	{
+		return TEXT("宏图 ") + Graph.Mid(6);
+	}
+	return Graph;
+}
+
+static FString LocalizePinNameForUi(const FString& InPin)
+{
+	const FString Pin = InPin.TrimStartAndEnd();
+	if (Pin.IsEmpty())
+	{
+		return TEXT("引脚");
+	}
+	if (Pin.Equals(TEXT("then"), ESearchCase::IgnoreCase)) return TEXT("执行输出");
+	if (Pin.Equals(TEXT("execute"), ESearchCase::IgnoreCase)) return TEXT("执行输入");
+	if (Pin.Equals(TEXT("Pressed"), ESearchCase::IgnoreCase)) return TEXT("按下");
+	if (Pin.Equals(TEXT("Released"), ESearchCase::IgnoreCase)) return TEXT("松开");
+	if (Pin.Equals(TEXT("ReturnValue"), ESearchCase::IgnoreCase)) return TEXT("返回值");
+	if (Pin.Equals(TEXT("InString"), ESearchCase::IgnoreCase)) return TEXT("字符串输入");
+	return Pin;
+}
+
+static FString LocalizeFunctionNameForUi(const FString& InFunction)
+{
+	const FString Fn = InFunction.TrimStartAndEnd();
+	if (Fn.IsEmpty())
+	{
+		return TEXT("函数");
+	}
+	if (Fn.Equals(TEXT("AddMovementInput"), ESearchCase::IgnoreCase)) return TEXT("AddMovementInput（添加移动输入）");
+	if (Fn.Equals(TEXT("CreateWidget"), ESearchCase::IgnoreCase)) return TEXT("CreateWidget（创建控件）");
+	if (Fn.Equals(TEXT("AddToViewport"), ESearchCase::IgnoreCase)) return TEXT("AddToViewport（添加到视口）");
+	if (Fn.Equals(TEXT("PrintString"), ESearchCase::IgnoreCase)) return TEXT("PrintString（屏幕提示）");
+	if (Fn.Equals(TEXT("LineTraceSingle"), ESearchCase::IgnoreCase)) return TEXT("LineTraceSingle（单线检测）");
+	if (Fn.Equals(TEXT("BreakHitResult"), ESearchCase::IgnoreCase)) return TEXT("BreakHitResult（拆分命中结果）");
+	if (Fn.Equals(TEXT("GetActorLocation"), ESearchCase::IgnoreCase)) return TEXT("GetActorLocation（获取位置）");
+	if (Fn.Equals(TEXT("GetActorForwardVector"), ESearchCase::IgnoreCase)) return TEXT("GetActorForwardVector（获取前向量）");
+	if (Fn.Equals(TEXT("SetActorLocation"), ESearchCase::IgnoreCase)) return TEXT("SetActorLocation（设置位置）");
+	return Fn;
+}
+
+static FString LocalizeNodeTypeForUi(const FString& InNodeType)
+{
+	const FString NodeType = InNodeType.TrimStartAndEnd();
+	if (NodeType.IsEmpty())
+	{
+		return TEXT("节点");
+	}
+	if (NodeType.Equals(TEXT("InputKey"), ESearchCase::IgnoreCase)) return TEXT("按键输入事件");
+	if (NodeType.Equals(TEXT("CallFunction"), ESearchCase::IgnoreCase)) return TEXT("函数调用");
+	if (NodeType.Equals(TEXT("MakeVector"), ESearchCase::IgnoreCase)) return TEXT("创建向量");
+	if (NodeType.Equals(TEXT("BreakVector"), ESearchCase::IgnoreCase)) return TEXT("拆分向量");
+	if (NodeType.Equals(TEXT("MakeRotator"), ESearchCase::IgnoreCase)) return TEXT("创建旋转");
+	if (NodeType.Equals(TEXT("BreakRotator"), ESearchCase::IgnoreCase)) return TEXT("拆分旋转");
+	if (NodeType.Equals(TEXT("Branch"), ESearchCase::IgnoreCase)) return TEXT("分支");
+	if (NodeType.Equals(TEXT("Sequence"), ESearchCase::IgnoreCase)) return TEXT("顺序");
+	if (NodeType.Equals(TEXT("Delay"), ESearchCase::IgnoreCase)) return TEXT("延迟");
+	if (NodeType.Equals(TEXT("Cast"), ESearchCase::IgnoreCase)) return TEXT("类型转换");
+	if (NodeType.Equals(TEXT("GetVariable"), ESearchCase::IgnoreCase)) return TEXT("获取变量节点");
+	if (NodeType.Equals(TEXT("SetVariable"), ESearchCase::IgnoreCase)) return TEXT("设置变量节点");
+	if (NodeType.Equals(TEXT("IsValid"), ESearchCase::IgnoreCase)) return TEXT("有效性判断");
+	return NodeType;
+}
+
+static FString TranslateEnglishPreviewText(FString InText)
+{
+	FString Text = InText.TrimStartAndEnd();
+	if (Text.IsEmpty() || ContainsCjkText(Text))
+	{
+		return Text;
+	}
+
+	Text.ReplaceInline(TEXT("in the EventGraph"), TEXT("在事件图表中"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("the EventGraph"), TEXT("事件图表"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("input event"), TEXT("输入事件"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("forward direction vector"), TEXT("前方向向量"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("movement input"), TEXT("移动输入"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("movement direction"), TEXT("移动方向"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("positive X (forward)"), TEXT("正 X（前方）"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("the W key"), TEXT("W 键"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("full movement input strength"), TEXT("完整移动输入强度"), ESearchCase::IgnoreCase);
+	Text.ReplaceInline(TEXT("when W is pressed"), TEXT("当按下 W 键时"), ESearchCase::IgnoreCase);
+
+	if (Text.StartsWith(TEXT("Create "), ESearchCase::IgnoreCase))
+	{
+		Text = TEXT("创建") + Text.Mid(7);
+	}
+	else if (Text.StartsWith(TEXT("Set "), ESearchCase::IgnoreCase))
+	{
+		Text = TEXT("将") + Text.Mid(4);
+	}
+	else if (Text.StartsWith(TEXT("Call "), ESearchCase::IgnoreCase))
+	{
+		Text = TEXT("调用") + Text.Mid(5);
+	}
+	else if (Text.StartsWith(TEXT("Use "), ESearchCase::IgnoreCase))
+	{
+		Text = TEXT("使用") + Text.Mid(4);
+	}
+	else if (Text.StartsWith(TEXT("Apply "), ESearchCase::IgnoreCase))
+	{
+		Text = TEXT("应用") + Text.Mid(6);
+	}
+	else if (Text.StartsWith(TEXT("Trigger "), ESearchCase::IgnoreCase))
+	{
+		Text = TEXT("触发") + Text.Mid(8);
+	}
+
+	return Text;
+}
+
+static FString BuildStepPreviewTextZh(const FBlueprintDslActionStep& Step)
+{
+	if (ContainsCjkText(Step.Description))
+	{
+		return Step.Description.TrimStartAndEnd();
+	}
+
+	switch (Step.ActionType)
+	{
+	case EBlueprintDslActionType::CreateNode:
+	{
+		if (Step.NodeType.Equals(TEXT("InputKey"), ESearchCase::IgnoreCase))
+		{
+			return FString::Printf(TEXT("在%s创建 %s 键输入事件。"), *LocalizeGraphNameForUi(Step.TargetGraph), *Step.FunctionName);
+		}
+		if (Step.NodeType.Equals(TEXT("CallFunction"), ESearchCase::IgnoreCase))
+		{
+			return FString::Printf(TEXT("调用 %s。"), *LocalizeFunctionNameForUi(Step.FunctionName));
+		}
+		if (Step.NodeType.Equals(TEXT("GetVariable"), ESearchCase::IgnoreCase) && !Step.VarName.IsEmpty())
+		{
+			return FString::Printf(TEXT("创建变量读取节点 %s。"), *Step.VarName);
+		}
+		if (Step.NodeType.Equals(TEXT("SetVariable"), ESearchCase::IgnoreCase) && !Step.VarName.IsEmpty())
+		{
+			return FString::Printf(TEXT("创建变量写入节点 %s。"), *Step.VarName);
+		}
+		if (!Step.TargetClass.IsEmpty() && Step.NodeType.Equals(TEXT("Cast"), ESearchCase::IgnoreCase))
+		{
+			return FString::Printf(TEXT("创建到 %s 的类型转换节点。"), *Step.TargetClass);
+		}
+		return FString::Printf(TEXT("创建%s节点。"), *LocalizeNodeTypeForUi(Step.NodeType));
+	}
+	case EBlueprintDslActionType::ConnectPins:
+		return FString::Printf(TEXT("连接 %s.%s -> %s.%s。"),
+			*Step.FromNodeId,
+			*LocalizePinNameForUi(Step.FromPin),
+			*Step.ToNodeId,
+			*LocalizePinNameForUi(Step.ToPin));
+	case EBlueprintDslActionType::SetPinDefault:
+		return FString::Printf(TEXT("将 %s 的 %s 设置为 %s。"),
+			*Step.NodeId,
+			*LocalizePinNameForUi(Step.PinName),
+			*Step.DefaultValue);
+	case EBlueprintDslActionType::Comment:
+		if (!Step.CommentText.IsEmpty())
+		{
+			return ContainsCjkText(Step.CommentText) ? Step.CommentText : TranslateEnglishPreviewText(Step.CommentText);
+		}
+		return TEXT("添加注释。");
+	case EBlueprintDslActionType::GetVariable:
+		return FString::Printf(TEXT("读取变量 %s。"), *Step.VarName);
+	case EBlueprintDslActionType::SetVariable:
+		return FString::Printf(TEXT("写入变量 %s。"), *Step.VarName);
+	case EBlueprintDslActionType::CreateMemberVariable:
+		return FString::Printf(TEXT("创建成员变量 %s。"), *Step.VarName);
+	case EBlueprintDslActionType::CreateFunctionGraph:
+		return FString::Printf(TEXT("创建函数图 %s（%s）。"), *Step.FunctionGraphName, *Step.FunctionGraphKind);
+	default:
+		break;
+	}
+
+	if (!Step.Description.IsEmpty())
+	{
+		return TranslateEnglishPreviewText(Step.Description);
+	}
+	return TEXT("(无描述)");
 }
 
 static bool LooksLikeManualPrereqText(const FString& InText)
@@ -748,7 +962,8 @@ static FString BuildManualPrereqSummaryFromSteps(const TArray<FBlueprintDslActio
 				continue;
 			}
 
-			const FString Line = FString::Printf(TEXT("- 第 %d 步：%s"), i + 1, *C.Left(220));
+			const FString Localized = TranslateEnglishPreviewText(C);
+			const FString Line = FString::Printf(TEXT("- 第 %d 步：%s"), i + 1, *Localized.Left(220));
 			if (!Seen.Contains(Line))
 			{
 				Seen.Add(Line);
@@ -1268,7 +1483,7 @@ FString SBlueprintAIAssistantPanel::BuildDslSummaryForMultiturn(const TArray<FBl
 	for (int32 i = 0; i < Steps.Num() && i < MaxLines; ++i)
 	{
 		const FBlueprintDslActionStep& St = Steps[i];
-		const FString Desc = St.Description.IsEmpty() ? TEXT("(无描述)") : St.Description;
+		const FString Desc = BuildStepPreviewTextZh(St);
 		Out += FString::Printf(TEXT("%d) [%s] %s\n"), i + 1, *DslActionTypeToDisplayString(St.ActionType), *Desc);
 		if (Out.Len() > MaxTotal)
 		{
@@ -3089,7 +3304,7 @@ void SBlueprintAIAssistantPanel::RebuildDslPreview()
 	{
 		const int32 StepIndex = i;
 		const FBlueprintDslActionStep& Step = CurrentDslSteps[StepIndex];
-		const FString Desc = Step.Description.IsEmpty() ? TEXT("(无描述)") : Step.Description;
+		const FString Desc = BuildStepPreviewTextZh(Step);
 		const FString Line = FString::Printf(
 			TEXT("%d) [%s] %s"),
 			StepIndex + 1,
@@ -4772,7 +4987,7 @@ FReply SBlueprintAIAssistantPanel::OnSubmitFeedbackClicked()
 		for (int32 i = 0; i < CurrentDslSteps.Num(); ++i)
 		{
 			const FBlueprintDslActionStep& Step = CurrentDslSteps[i];
-			const FString Desc = Step.Description.IsEmpty() ? TEXT("(无描述)") : Step.Description;
+			const FString Desc = BuildStepPreviewTextZh(Step);
 			Md += FString::Printf(TEXT("%d. [%s] %s\n"), i + 1, *DslActionTypeToDisplayString(Step.ActionType), *Desc);
 			if (!Step.NodeId.IsEmpty())      Md += FString::Printf(TEXT("   - nodeId: `%s`\n"), *Step.NodeId);
 			if (!Step.NodeType.IsEmpty())    Md += FString::Printf(TEXT("   - nodeType: `%s`\n"), *Step.NodeType);
